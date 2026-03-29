@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: var(--font-sans), sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+}
+
+.page-shell {
+  @apply space-y-6 p-4 sm:p-6;
+}
