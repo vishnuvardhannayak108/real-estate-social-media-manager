@@ -1,0 +1,1385 @@
+{
+  "name": "Real Estate AI Automation System v2.0",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "4ff7f6d5-b629-43a0-8791-2218b799ecb5",
+      "name": "Webhook: Content Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        16
+      ],
+      "webhookId": "content-upload-001"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.video_url }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "193abefc-5d58-46a5-8d59-9d8694fd5c6d",
+      "name": "IF: Validate Upload Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/{{ $env.INSTAGRAM_ACCOUNT_ID }}/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "video_url",
+              "value": "={{ $json.video_url }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $json.caption }} {{ $json.hashtags }}"
+            },
+            {
+              "name": "media_type",
+              "value": "REELS"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $env.INSTAGRAM_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fa49df0d-fd29-417e-9cf3-186121b06798",
+      "name": "POST: Instagram Reel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -112,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/{{ $env.FACEBOOK_PAGE_ID }}/videos",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file_url",
+              "value": "={{ $json.video_url }}"
+            },
+            {
+              "name": "description",
+              "value": "={{ $json.caption }} {{ $json.hashtags }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $env.FACEBOOK_PAGE_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d90819f8-e46b-446c-adbc-e8b9eb98fa59",
+      "name": "POST: Facebook Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -112,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "posts",
+        "options": {}
+      },
+      "id": "1fde214e-2e7d-4eec-8762-0e90cffafd72",
+      "name": "Supabase: Insert Post",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        128,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"message\": \"Content posted successfully\" }",
+        "options": {}
+      },
+      "id": "20e816f5-7d46-4b13-9fa5-3450c098b968",
+      "name": "Respond: Upload Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        352,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": false, \"error\": \"Invalid payload\" }",
+        "options": {}
+      },
+      "id": "00d41b65-1772-4ed1-b9b0-492d965956a2",
+      "name": "Respond: Upload Failed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meta-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "77a97298-692e-4145-8ec4-36a2e627a7b7",
+      "name": "Webhook: Meta DM/Comment",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        528
+      ],
+      "webhookId": "meta-dm-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.META_WEBHOOK_SECRET;\nconst signature = $input.first().json.headers['x-hub-signature-256'] || '';\nconst payload = JSON.stringify($input.first().json.body);\nconst expected = 'sha256=' + crypto.createHmac('sha256', secret).update(payload).digest('hex');\nif (signature !== expected) {\n  throw new Error('HMAC signature verification failed');\n}\nreturn $input.all();"
+      },
+      "id": "f6a3a957-9e06-4cdf-9c17-190184a8f522",
+      "name": "Code: Verify HMAC Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "processed_webhooks",
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "webhook_id",
+              "value": "={{ $json.body.entry[0].id + '_' + $json.body.entry[0].time }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "20d6e593-acb7-417f-8a75-b45404876463",
+      "name": "Supabase: Idempotency Check",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "id": "3aae7ae0-86a1-49e2-92df-cefcf95dd78d",
+      "name": "IF: Is Duplicate Webhook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        112,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "processed_webhooks",
+        "options": {}
+      },
+      "id": "50cc7f5e-4670-4162-9535-f76aa2a3d68f",
+      "name": "Supabase: Mark Webhook Processed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        336,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "leads",
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "instagram_id",
+              "value": "={{ $json.body.entry[0].messaging[0].sender.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "83d6910d-bd66-43d9-aada-662fae4f8f9b",
+      "name": "Supabase: Fetch Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        560,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "id": "67923734-f7c7-4ce7-98e2-156a53ac3866",
+      "name": "IF: New Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        768,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "leads",
+        "options": {}
+      },
+      "id": "5ab7410b-bc14-4cfc-b436-a523306fcc39",
+      "name": "Supabase: Create New Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        992,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "chats",
+        "limit": 10,
+        "where": {
+          "values": [
+            {
+              "column": "lead_id",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d307c066-50b9-4cb8-9570-66c02ba30107",
+      "name": "Supabase: Fetch Last 10 Messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Supabase: Fetch Lead').first().json[0] || $('Supabase: Create New Lead').first().json[0];\nconst history = $('Supabase: Fetch Last 10 Messages').all().map(item => item.json);\nconst inboundMessage = $('Webhook: Meta DM/Comment').first().json.body.entry[0].messaging[0].message.text;\n\nreturn [{\n  json: {\n    message: inboundMessage,\n    history: history.reverse().map(h => ({ sender: h.sender, message: h.message })),\n    lead_data: {\n      budget: lead.budget || null,\n      location: lead.location || null,\n      property_type: lead.property_type || null,\n      timeline: lead.timeline || null,\n      status: lead.status || 'QUALIFYING'\n    },\n    lead_id: lead.id,\n    instagram_id: lead.instagram_id\n  }\n}];"
+      },
+      "id": "951e6318-1fef-497d-8e33-c8d514c9bf5d",
+      "name": "Code: Build AI Input Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "gpt-4o"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\":\"system\",\"content\":\"You are a real estate sales assistant qualifying leads via Instagram DMs.\\n\\nYour job:\\n- Detect buyer intent, budget, location, property type, timeline\\n- Identify if the lead is in negotiation mode\\n- Decide if a call should be booked\\n- Always respond in valid JSON only — no prose, no markdown\\n\\nRULES:\\n1. If lead shows negotiation signals → set status NEGOTIATION\\n2. If lead is qualified and interested → set trigger_booking true\\n3. Never make up property data\\n4. Keep chat_response conversational, under 100 words\\n5. Always populate all fields — use null if unknown\\n\\nOUTPUT SCHEMA (strict JSON only):\\n{\\n  \\\"chat_response\\\": string (max 100 words),\\n  \\\"status\\\": \\\"QUALIFYING\\\" | \\\"QUALIFIED\\\" | \\\"NEGOTIATION\\\" | \\\"CALL_BOOKED\\\" | \\\"NURTURE\\\" | \\\"CLOSED\\\",\\n  \\\"trigger_booking\\\": boolean,\\n  \\\"lead_data\\\": {\\n    \\\"budget\\\": string | null,\\n    \\\"location\\\": string | null,\\n    \\\"property_type\\\": string | null,\\n    \\\"timeline\\\": string | null\\n  }\\n}\"},{\"role\":\"user\",\"content\":\"={{ JSON.stringify($json) }}\"}]"
+            },
+            {
+              "name": "temperature",
+              "value": "=0.3"
+            },
+            {
+              "name": "max_tokens",
+              "value": "=500"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "51e0ab47-6325-4d55-b6d1-51fe1f2ae9a8",
+      "name": "HTTP: Call OpenAI API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1648,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawContent = $input.first().json.choices[0].message.content;\nlet parsed;\ntry {\n  const cleaned = rawContent.replace(/```json|```/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch(e) {\n  parsed = {\n    chat_response: \"Thanks for reaching out! Let me connect you with our team shortly.\",\n    status: \"QUALIFYING\",\n    trigger_booking: false,\n    lead_data: { budget: null, location: null, property_type: null, timeline: null }\n  };\n}\n\nconst validStatuses = ['QUALIFYING','QUALIFIED','NEGOTIATION','CALL_BOOKED','NURTURE','CLOSED'];\nif (!validStatuses.includes(parsed.status)) parsed.status = 'QUALIFYING';\nif (typeof parsed.trigger_booking !== 'boolean') parsed.trigger_booking = false;\nif (!parsed.chat_response || parsed.chat_response.trim() === '') {\n  parsed.chat_response = \"Thanks for reaching out! Let me connect you with our team shortly.\";\n}\n\nconst leadId = $('Code: Build AI Input Payload').first().json.lead_id;\nconst instagramId = $('Code: Build AI Input Payload').first().json.instagram_id;\nconst inboundMessage = $('Code: Build AI Input Payload').first().json.message;\n\nreturn [{ json: { ...parsed, lead_id: leadId, instagram_id: instagramId, inbound_message: inboundMessage } }];"
+      },
+      "id": "c4834860-09de-4e5a-9045-507e7c709bd2",
+      "name": "Code: Validate & Parse AI Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "value2": "NEGOTIATION"
+            }
+          ]
+        }
+      },
+      "id": "e22372cb-77bb-466a-b70d-b28df27d6568",
+      "name": "IF: NEGOTIATION Detected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2096,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.trigger_booking }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "bf167cf4-db31-4023-bf05-4dec960c1022",
+      "name": "IF: Trigger Booking?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2096,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/me/messages",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "recipient",
+              "value": "={ \"id\": \"{{ $json.instagram_id }}\" }"
+            },
+            {
+              "name": "message",
+              "value": "={ \"text\": \"🏠 Great news! Let's schedule a call to discuss your requirements in detail. Book your slot here: {{ $env.CALENDLY_LINK }}\" }"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $env.INSTAGRAM_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2882f47-675b-41cd-898c-b2cd1c43a965",
+      "name": "HTTP: Send Calendly Link (Negotiation)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2320,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/me/messages",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "recipient",
+              "value": "={ \"id\": \"{{ $json.instagram_id }}\" }"
+            },
+            {
+              "name": "message",
+              "value": "={ \"text\": \"👋 You seem like a great fit! Book a free consultation call with our team: {{ $env.CALENDLY_LINK }}\" }"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $env.INSTAGRAM_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9ae4753f-9772-4d3c-b06b-2e7e0e6c981c",
+      "name": "HTTP: Send Calendly Link (Booking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2320,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/me/messages",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "recipient",
+              "value": "={ \"id\": \"{{ $json.instagram_id }}\" }"
+            },
+            {
+              "name": "message",
+              "value": "={ \"text\": \"{{ $json.chat_response }}\" }"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $env.INSTAGRAM_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3bf18fc1-d284-4845-9aa3-189f3e7446e3",
+      "name": "HTTP: Send Normal Chat Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2320,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": "public",
+        "table": "leads",
+        "options": {}
+      },
+      "id": "07ac6211-ed85-44dd-adaf-abb371048280",
+      "name": "Supabase: Update Lead CRM",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "chats",
+        "options": {}
+      },
+      "id": "44b408d2-bf53-45d1-a552-daf59f2d2a22",
+      "name": "Supabase: Log Chat Messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        2768,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "system_logs",
+        "options": {}
+      },
+      "id": "e1fd7be2-9e16-41c6-8408-861cbca70a1e",
+      "name": "Supabase: Write System Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        2992,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "calendly-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "224887e9-7d90-4d2b-97a2-581a403a5fa6",
+      "name": "Webhook: Calendly Booking",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        1024
+      ],
+      "webhookId": "calendly-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.CALENDLY_WEBHOOK_SECRET;\nconst signature = $input.first().json.headers['calendly-webhook-signature'] || '';\nconst payload = JSON.stringify($input.first().json.body);\nconst expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');\nif (!signature.includes(expected)) {\n  throw new Error('Calendly HMAC verification failed');\n}\nreturn $input.all();"
+      },
+      "id": "6e2d0c90-3fa5-4b7f-8233-2f78bb5dfab5",
+      "name": "Code: Verify Calendly Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "bookings",
+        "options": {}
+      },
+      "id": "7fdfed44-dbf1-4947-b46a-fc799254a854",
+      "name": "Supabase: Insert Booking",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": "public",
+        "table": "leads",
+        "options": {}
+      },
+      "id": "04b80ba6-4b34-4b83-96f2-dc24b3f97f92",
+      "name": "Supabase: Update Lead → CALL_BOOKED",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        128,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "payment-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "6291d2b0-e715-47a7-94a4-f9b2f6740bdf",
+      "name": "Webhook: Payment (Razorpay/Stripe)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        1328
+      ],
+      "webhookId": "payment-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.RAZORPAY_WEBHOOK_SECRET;\nconst signature = $input.first().json.headers['x-razorpay-signature'] || '';\nconst payload = JSON.stringify($input.first().json.body);\nconst expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');\nif (signature !== expected) {\n  throw new Error('Payment webhook signature verification failed');\n}\nreturn $input.all();"
+      },
+      "id": "8b200553-2af0-4c1d-a929-dca39eaa92e4",
+      "name": "Code: Verify Payment Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "payments",
+        "options": {}
+      },
+      "id": "622d2f4b-203f-4453-ab49-75f209d2add3",
+      "name": "Supabase: Insert Payment Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": "public",
+        "table": "leads",
+        "options": {}
+      },
+      "id": "8a41e3f4-73b0-4bad-8810-4de8efc0626a",
+      "name": "Supabase: Update Lead → CLOSED",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        128,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SENDGRID_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "personalizations",
+              "value": "=[{\"to\":[{\"email\":\"{{ $json.body.payload.payment.entity.email }}\"}],\"subject\":\"Payment Confirmed - Invoice Attached\"}]"
+            },
+            {
+              "name": "from",
+              "value": "={ \"email\": \"{{ $env.FROM_EMAIL }}\", \"name\": \"Real Estate Team\" }"
+            },
+            {
+              "name": "content",
+              "value": "=[{\"type\":\"text/plain\",\"value\":\"Thank you for your payment! Your transaction has been confirmed. Our team will contact you within 24 hours.\"}]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7386dff5-456e-4883-b68d-22b2dae3297d",
+      "name": "HTTP: Send Invoice Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        352,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "c914c4f4-9162-4322-a646-99170cc5a370",
+      "name": "Cron: Follow-up Engine (Hourly)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "leads",
+        "where": {
+          "values": [
+            {
+              "column": "status",
+              "value": "CLOSED"
+            },
+            {
+              "column": "status",
+              "value": "CALL_BOOKED"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b035ce22-57af-45b1-bacd-5f9989b17b5d",
+      "name": "Supabase: Fetch Leads for Follow-up",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const leads = $input.all().map(item => item.json);\nconst now = Date.now();\nconst results = [];\n\nfor (const lead of leads) {\n  const lastChat = new Date(lead.last_message_at || lead.created_at).getTime();\n  const hoursSinceContact = (now - lastChat) / (1000 * 60 * 60);\n  let followUpType = null;\n\n  if (hoursSinceContact >= 72 && lead.status === 'CALL_BOOKED') {\n    followUpType = 'PAYMENT_NUDGE';\n  } else if (hoursSinceContact >= 48 && lead.status === 'QUALIFIED') {\n    followUpType = 'BOOKING_NUDGE';\n  } else if (hoursSinceContact >= 24 && lead.status === 'QUALIFYING') {\n    followUpType = 'REMINDER';\n  }\n\n  if (followUpType) {\n    results.push({ json: { ...lead, followUpType } });\n  }\n}\n\nreturn results;"
+      },
+      "id": "19a07825-5830-445d-9d8d-9806bca293f5",
+      "name": "Code: Check Follow-up Eligibility",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/me/messages",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "recipient",
+              "value": "={ \"id\": \"{{ $json.instagram_id }}\" }"
+            },
+            {
+              "name": "message",
+              "value": "={ \"text\": \"👋 Hi! Just checking in — are you still looking for your dream property? We have some great new listings! Reply anytime 🏠\" }"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $env.INSTAGRAM_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b285b88e-31c5-41a1-9351-2ef6d66501dc",
+      "name": "HTTP: Send Follow-up Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        128,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "error-handler",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "4e1896e2-3e32-47d4-b297-32b0cfc9e2fa",
+      "name": "Webhook: Error Handler",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        1920
+      ],
+      "webhookId": "error-001"
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "failed_jobs",
+        "options": {}
+      },
+      "id": "48214f4f-3a2b-4d59-8171-93c88f2f1615",
+      "name": "Supabase: Log Failed Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        1920
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.retry_count }}",
+              "operation": "largerEqual",
+              "value2": 3
+            }
+          ]
+        }
+      },
+      "id": "b7370c9f-6d3b-4e8d-962d-d83efa352303",
+      "name": "IF: Max Retries Reached?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        1920
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=🚨 *ALERT: Workflow Failure*\\nWorkflow: {{ $json.workflow_name }}\\nError: {{ $json.error_message }}\\nRetries: {{ $json.retry_count }}\\nTime: {{ $now.toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "91560049-5cbb-4e31-a036-8f70e04c5aa2",
+      "name": "HTTP: Send Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        128,
+        1840
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Content Upload": {
+      "main": [
+        [
+          {
+            "node": "IF: Validate Upload Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Validate Upload Input": {
+      "main": [
+        [
+          {
+            "node": "POST: Instagram Reel",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "POST: Facebook Video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Upload Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST: Instagram Reel": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Insert Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST: Facebook Video": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Insert Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Insert Post": {
+      "main": [
+        [
+          {
+            "node": "Respond: Upload Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Meta DM/Comment": {
+      "main": [
+        [
+          {
+            "node": "Code: Verify HMAC Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Verify HMAC Signature": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Idempotency Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Idempotency Check": {
+      "main": [
+        [
+          {
+            "node": "IF: Is Duplicate Webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Duplicate Webhook?": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Mark Webhook Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Mark Webhook Processed": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Fetch Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Fetch Lead": {
+      "main": [
+        [
+          {
+            "node": "IF: New Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: New Lead?": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Create New Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Supabase: Fetch Last 10 Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Create New Lead": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Fetch Last 10 Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Fetch Last 10 Messages": {
+      "main": [
+        [
+          {
+            "node": "Code: Build AI Input Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build AI Input Payload": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Call OpenAI API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Call OpenAI API": {
+      "main": [
+        [
+          {
+            "node": "Code: Validate & Parse AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Validate & Parse AI Output": {
+      "main": [
+        [
+          {
+            "node": "IF: NEGOTIATION Detected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: NEGOTIATION Detected?": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Send Calendly Link (Negotiation)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: Trigger Booking?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Trigger Booking?": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Send Calendly Link (Booking)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP: Send Normal Chat Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Send Calendly Link (Negotiation)": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Update Lead CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Send Calendly Link (Booking)": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Update Lead CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Send Normal Chat Reply": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Update Lead CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Update Lead CRM": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Log Chat Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Log Chat Messages": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Write System Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Calendly Booking": {
+      "main": [
+        [
+          {
+            "node": "Code: Verify Calendly Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Verify Calendly Signature": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Insert Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Insert Booking": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Update Lead → CALL_BOOKED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Payment (Razorpay/Stripe)": {
+      "main": [
+        [
+          {
+            "node": "Code: Verify Payment Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Verify Payment Signature": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Insert Payment Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Insert Payment Record": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Update Lead → CLOSED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Update Lead → CLOSED": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Send Invoice Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cron: Follow-up Engine (Hourly)": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Fetch Leads for Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Fetch Leads for Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Code: Check Follow-up Eligibility",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Check Follow-up Eligibility": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Send Follow-up Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Supabase: Log Failed Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: Log Failed Job": {
+      "main": [
+        [
+          {
+            "node": "IF: Max Retries Reached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Max Retries Reached?": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Send Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "1f63af02-8647-4be9-bace-12545b7fd010",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b5961a9a86858f7b4d700faf07733c2101f8b3d6926c7c9d4100a662ad7f22e3"
+  },
+  "id": "h8gF8Jr93s4711aG",
+  "tags": []
+}
